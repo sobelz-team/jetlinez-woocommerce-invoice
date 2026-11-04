@@ -199,7 +199,8 @@ final class JLWI_Weekly_Report {
 							}
 						}
 
-						if ( '' !== $media_id && JLWI_Settings::enabled( 'delete_remote_media' ) ) {
+						// Flow stages may still need the image after this request returns.
+						if ( '' !== $media_id && 'flow' !== JLWI_Settings::get( 'send_method', 'whatsapp' ) && JLWI_Settings::enabled( 'delete_remote_media' ) ) {
 							$deleted = $client->delete_media( $media_id );
 							if ( is_wp_error( $deleted ) ) {
 								$this->log_chart_error( 'Could not delete remote weekly report chart.', $deleted );

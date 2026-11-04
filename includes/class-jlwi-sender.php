@@ -508,7 +508,8 @@ final class JLWI_Sender {
 				$order->add_order_note( $note );
 			}
 
-			if ( '' !== $media_id && ! $retry_needed && JLWI_Settings::enabled( 'delete_remote_media' ) ) {
+			// Flows can still be running after API acceptance and need this media later.
+			if ( '' !== $media_id && ! $retry_needed && 'flow' !== JLWI_Settings::get( 'send_method', 'whatsapp' ) && JLWI_Settings::enabled( 'delete_remote_media' ) ) {
 				$deleted = $client->delete_media( $media_id );
 				if ( is_wp_error( $deleted ) ) {
 					$this->log_wp_error( 'warning', 'Could not delete remote Jetlinez media.', $deleted, $order_id );

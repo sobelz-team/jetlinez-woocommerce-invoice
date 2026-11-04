@@ -142,6 +142,11 @@ final class JLWI_API_Client {
 		return array( 'data' => array( 'id' => 'message-id' ) );
 	}
 
+	public function delete_media( $media_id ) {
+		++$GLOBALS['jlwi_test_deletions'];
+		return array( 'success' => true );
+	}
+
 	public static function is_transient_error() {
 		return false;
 	}
@@ -348,6 +353,14 @@ $completed_files = array_filter( $GLOBALS['jlwi_test_messages'], static function
 jlwi_test_assert( 2 === count( $completed_texts ), 'Completed should send admin text plus customer text.' );
 jlwi_test_assert( 1 === count( $completed_files ), 'Completed should send one customer file.' );
 jlwi_test_assert( 1 === $GLOBALS['jlwi_test_uploads'], 'Completed should upload the invoice once.' );
+
+$GLOBALS['jlwi_test_option']['delete_remote_media'] = 'yes';
+$GLOBALS['jlwi_test_deletions'] = 0;
+$sender->process_order( 100, 'processing', 'pending', 0, false );
+jlwi_test_assert( 1 === $GLOBALS['jlwi_test_deletions'], 'Direct delivery should retain the configured remote cleanup behavior.' );
+$GLOBALS['jlwi_test_option']['send_method'] = 'flow';
+$sender->process_order( 100, 'processing', 'pending', 0, false );
+jlwi_test_assert( 1 === $GLOBALS['jlwi_test_deletions'], 'A queued flow must retain remote media for its later stages.' );
 
 unlink( $GLOBALS['jlwi_test_pdf'] );
 

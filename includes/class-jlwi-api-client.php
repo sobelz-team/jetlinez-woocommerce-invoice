@@ -24,9 +24,10 @@ final class JLWI_API_Client {
 	/**
 	 * Validate required configuration.
 	 *
+	 * @param bool $require_destination Whether a device or flow must be selected.
 	 * @return true|WP_Error
 	 */
-	public function validate_configuration() {
+	public function validate_configuration( $require_destination = true ) {
 		$base_url = trim( (string) $this->settings['api_base_url'] );
 		$parts    = wp_parse_url( $base_url );
 		if ( '' === $base_url || ! is_array( $parts ) || empty( $parts['host'] ) || empty( $parts['scheme'] ) || ! in_array( strtolower( $parts['scheme'] ), array( 'http', 'https' ), true ) ) {
@@ -37,11 +38,61 @@ final class JLWI_API_Client {
 			return new WP_Error( 'jlwi_missing_api_key', __( 'API Key جتلاینز وارد نشده است.', JLWI_TEXT_DOMAIN ) );
 		}
 
-		if ( '' === trim( (string) $this->settings['device_id'] ) ) {
-			return new WP_Error( 'jlwi_missing_device_id', __( 'Device ID واتساپ جتلاینز وارد نشده است.', JLWI_TEXT_DOMAIN ) );
+		if ( $require_destination ) {
+			$keys   = array( 'whatsapp' => 'device_id', 'telegram' => 'telegram_device_id', 'flow' => 'flow_id' );
+			$method = $this->settings['send_method'];
+			if ( ! is_string( $method ) || ! isset( $keys[ $method ] ) ) {
+				return new WP_Error( 'jlwi_invalid_send_method', __( 'روش ارسال جتلاینز معتبر نیست.', JLWI_TEXT_DOMAIN ) );
+			}
+			if ( '' === trim( (string) $this->settings[ $keys[ $method ] ] ) ) {
+				return new WP_Error( 'jlwi_missing_destination', __( 'دستگاه یا Flow مربوط به روش ارسال انتخاب نشده است.', JLWI_TEXT_DOMAIN ) );
+			}
 		}
 
 		return true;
+	}
+
+	/**
+	 * Discover account devices and flows without requiring a selected destination.
+	 *
+	 * @return array|WP_Error Normalized lists; one failed list does not hide the other.
+	 */
+	public function discover_destinations() {
+		$config = $this->validate_configuration( false );
+		if ( is_wp_error( $config ) ) {
+			return $config;
+		}
+
+		$result = array( 'devices' => array(), 'flows' => array(), 'errors' => array() );
+		foreach ( array( 'devices' => '/devices', 'flows' => '/send-flows' ) as $key => $endpoint ) {
+			$response = $this->request( 'GET', $endpoint );
+			if ( is_wp_error( $response ) ) {
+				$api_key = preg_replace( '/[\r\n]+/', '', (string) $this->settings['api_key'] );
+				$result['errors'][ $key ] = str_replace( $api_key, '********', $response->get_error_message() );
+				continue;
+			}
+
+			$items = isset( $response['data']['items'] ) ? $response['data']['items'] : ( isset( $response['data'] ) ? $response['data'] : null );
+			if ( ! is_array( $items ) || ( array() !== $items && array_keys( $items ) !== range( 0, count( $items ) - 1 ) ) ) {
+				$result['errors'][ $key ] = __( 'ساختار فهرست دریافتی از جتلاینز معتبر نیست.', JLWI_TEXT_DOMAIN );
+				continue;
+			}
+
+			foreach ( $items as $item ) {
+				if ( ! is_array( $item ) || ! isset( $item['id'] ) || ! is_scalar( $item['id'] ) || '' === trim( (string) $item['id'] ) ) {
+					continue;
+				}
+				$id      = sanitize_text_field( (string) $item['id'] );
+				$name    = isset( $item['name'] ) && is_scalar( $item['name'] ) ? sanitize_text_field( (string) $item['name'] ) : $id;
+				$channel = isset( $item['channel'] ) && is_string( $item['channel'] ) ? $item['channel'] : '';
+				if ( 'devices' === $key && ! in_array( $channel, array( 'whatsapp', 'telegram' ), true ) ) {
+					continue;
+				}
+				$result[ $key ][] = array( 'id' => $id, 'name' => $name, 'channel' => $channel );
+			}
+		}
+
+		return $result;
 	}
 
 	/**
@@ -53,7 +104,7 @@ final class JLWI_API_Client {
 	 * @return array|WP_Error Array includes id and data on success.
 	 */
 	public function upload_media( $file_path ) {
-		$config = $this->validate_configuration();
+		$config = $this->validate_configuration( false );
 		if ( is_wp_error( $config ) ) {
 			return $config;
 		}
@@ -149,7 +200,7 @@ final class JLWI_API_Client {
 	}
 
 	/**
-	 * Send a WhatsApp message.
+	 * Send through the configured Jetlinez device or flow.
 	 *
 	 * @param string $phone    Normalized phone number (digits only).
 	 * @param string $text     Optional text.
@@ -178,9 +229,21 @@ final class JLWI_API_Client {
 			return new WP_Error( 'jlwi_message_empty', __( 'برای ارسال، متن یا شناسه مدیا لازم است.', JLWI_TEXT_DOMAIN ) );
 		}
 
-		$payload = array(
-			'phonenumber' => $phone,
-		);
+		$method = $this->settings['send_method'];
+		if ( 'flow' === $method ) {
+			$payload = array(
+				'phone'     => $phone,
+				'withDelay' => 'yes' !== $this->settings['without_delay'],
+				'requestId' => wp_generate_uuid4(),
+			);
+			$endpoint = '/send-flows/' . rawurlencode( (string) $this->settings['flow_id'] ) . '/message';
+		} elseif ( 'telegram' === $method ) {
+			$payload  = array( 'phone' => $phone );
+			$endpoint = '/telegrams/' . rawurlencode( (string) $this->settings['telegram_device_id'] ) . '/message';
+		} else {
+			$payload  = array( 'phonenumber' => $phone );
+			$endpoint = '/whatsapps/' . rawurlencode( (string) $this->settings['device_id'] ) . '/message';
+		}
 
 		if ( '' !== $text ) {
 			$payload['text'] = $text;
@@ -190,9 +253,8 @@ final class JLWI_API_Client {
 			$payload['mediaId'] = $media_id;
 		}
 
-		$endpoint = '/whatsapps/' . rawurlencode( (string) $this->settings['device_id'] ) . '/message';
-		if ( 'yes' === $this->settings['without_delay'] ) {
-			$endpoint = add_query_arg( 'without_delay', '1', $endpoint );
+		if ( 'flow' !== $method && 'yes' === $this->settings['without_delay'] ) {
+			$endpoint = add_query_arg( 'without_delay', 'true', $endpoint );
 		}
 
 		return $this->request(

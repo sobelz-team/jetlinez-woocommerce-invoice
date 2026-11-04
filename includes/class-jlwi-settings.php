@@ -37,7 +37,10 @@ final class JLWI_Settings {
 			'enabled'                          => 'no',
 			'api_base_url'                     => 'https://my.jetlinez.com/api/v1',
 			'api_key'                          => '',
+			'send_method'                      => 'whatsapp',
 			'device_id'                        => '',
+			'telegram_device_id'               => '',
+			'flow_id'                          => '',
 			'target_statuses'                   => array( 'processing', 'completed' ),
 			// Kept for migrating settings saved by versions earlier than 1.2.0.
 			'enable_processing'                 => 'yes',
@@ -619,8 +622,13 @@ final class JLWI_Settings {
 			&& ! empty( $parts['scheme'] )
 			&& in_array( strtolower( $parts['scheme'] ), array( 'http', 'https' ), true );
 
+		$method = self::get( 'send_method', 'whatsapp' );
+		$keys   = array( 'whatsapp' => 'device_id', 'telegram' => 'telegram_device_id', 'flow' => 'flow_id' );
+
 		return $valid_url
 			&& '' !== trim( (string) self::get( 'api_key' ) )
-			&& '' !== trim( (string) self::get( 'device_id' ) );
+			&& is_string( $method )
+			&& isset( $keys[ $method ] )
+			&& '' !== trim( (string) self::get( $keys[ $method ] ) );
 	}
 }

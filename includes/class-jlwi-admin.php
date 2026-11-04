@@ -17,6 +17,7 @@ final class JLWI_Admin {
 	public function register_hooks() {
 		add_action( 'admin_menu', array( $this, 'admin_menu' ), 60 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+		add_action( 'wp_ajax_jlwi_discover_destinations', array( $this, 'discover_destinations' ) );
 		add_action( 'admin_post_jlwi_save_settings', array( $this, 'save_settings' ) );
 		add_action( 'admin_post_jlwi_send_test', array( $this, 'send_test' ) );
 		add_action( 'admin_post_jlwi_send_daily_report_now', array( $this, 'send_daily_report_now' ) );
@@ -36,7 +37,7 @@ final class JLWI_Admin {
 			add_submenu_page(
 				'woocommerce',
 				__( 'تنظیمات Jetlinez', JLWI_TEXT_DOMAIN ),
-				__( 'Jetlinez WhatsApp', JLWI_TEXT_DOMAIN ),
+				__( 'Jetlinez', JLWI_TEXT_DOMAIN ),
 				$capability,
 				'jlwi-settings',
 				array( $this, 'render_page' )
@@ -44,7 +45,7 @@ final class JLWI_Admin {
 		} else {
 			add_options_page(
 				__( 'تنظیمات Jetlinez', JLWI_TEXT_DOMAIN ),
-				__( 'Jetlinez WhatsApp', JLWI_TEXT_DOMAIN ),
+				__( 'Jetlinez', JLWI_TEXT_DOMAIN ),
 				'manage_options',
 				'jlwi-settings',
 				array( $this, 'render_page' )
@@ -64,6 +65,21 @@ final class JLWI_Admin {
 		}
 
 		wp_enqueue_style( 'jlwi-admin', JLWI_URL . 'assets/admin.css', array(), JLWI_VERSION );
+		wp_enqueue_script( 'jlwi-admin', JLWI_URL . 'assets/admin.js', array(), JLWI_VERSION, true );
+		wp_localize_script( 'jlwi-admin', 'jlwiConnection', array(
+			'url'       => admin_url( 'admin-ajax.php' ),
+			'nonce'     => wp_create_nonce( 'jlwi_discover_destinations' ),
+			'hasApiKey' => '' !== trim( (string) JLWI_Settings::get( 'api_key' ) ),
+			'loading'   => __( 'در حال دریافت دستگاه‌ها و Flowها…', JLWI_TEXT_DOMAIN ),
+			'loaded'    => __( 'فهرست‌ها دریافت شدند؛ روش و مقصد ارسال را انتخاب و تنظیمات را ذخیره کنید.', JLWI_TEXT_DOMAIN ),
+			'failed'    => __( 'دریافت فهرست‌ها ناموفق بود. دوباره تلاش کنید.', JLWI_TEXT_DOMAIN ),
+			'needKey'   => __( 'ابتدا API Key را وارد کنید.', JLWI_TEXT_DOMAIN ),
+			'choose'    => __( 'انتخاب کنید…', JLWI_TEXT_DOMAIN ),
+			'empty'     => __( 'موردی یافت نشد', JLWI_TEXT_DOMAIN ),
+			'missing'   => __( 'انتخاب قبلی؛ در فهرست فعلی نیست', JLWI_TEXT_DOMAIN ),
+			'devices'   => __( 'دستگاه‌ها', JLWI_TEXT_DOMAIN ),
+			'flows'     => __( 'Flowها', JLWI_TEXT_DOMAIN ),
+		) );
 	}
 
 	/**
@@ -105,7 +121,7 @@ final class JLWI_Admin {
 		<div class="wrap jlwi-wrap" dir="rtl">
 			<h1><?php echo esc_html__( 'Jetlinez Invoice برای WooCommerce', JLWI_TEXT_DOMAIN ); ?></h1>
 			<p class="jlwi-lead">
-				<?php echo esc_html__( 'ارسال خودکار پیام وضعیت و فاکتور سفارش‌های ووکامرس از طریق واتساپ جتلاینز.', JLWI_TEXT_DOMAIN ); ?>
+				<?php echo esc_html__( 'ارسال خودکار پیام وضعیت، فاکتور و گزارش از طریق واتساپ، تلگرام یا Flow جتلاینز.', JLWI_TEXT_DOMAIN ); ?>
 			</p>
 
 			<nav class="nav-tab-wrapper woo-nav-tab-wrapper jlwi-tabs" aria-label="<?php echo esc_attr__( 'بخش‌های تنظیمات Jetlinez', JLWI_TEXT_DOMAIN ); ?>">
@@ -127,7 +143,7 @@ final class JLWI_Admin {
 				<?php if ( 'connection' === $active_tab ) : ?>
 				<div id="jlwi-panel-connection" class="jlwi-tab-panel" role="region" aria-labelledby="jlwi-tab-connection">
 					<div class="jlwi-status-grid">
-						<?php $this->status_card( __( 'اتصال API', JLWI_TEXT_DOMAIN ), JLWI_Settings::is_api_configured(), JLWI_Settings::is_api_configured() ? __( 'تنظیمات کامل است', JLWI_TEXT_DOMAIN ) : __( 'API Key یا Device ID ناقص است', JLWI_TEXT_DOMAIN ) ); ?>
+						<?php $this->status_card( __( 'اتصال API', JLWI_TEXT_DOMAIN ), JLWI_Settings::is_api_configured(), JLWI_Settings::is_api_configured() ? __( 'تنظیمات کامل است', JLWI_TEXT_DOMAIN ) : __( 'API Key یا مقصد روش ارسال ناقص است', JLWI_TEXT_DOMAIN ) ); ?>
 						<?php $this->status_card( __( 'WooCommerce', JLWI_TEXT_DOMAIN ), class_exists( 'WooCommerce' ), class_exists( 'WooCommerce' ) ? __( 'فعال', JLWI_TEXT_DOMAIN ) : __( 'غیرفعال', JLWI_TEXT_DOMAIN ) ); ?>
 						<?php $this->status_card( __( 'Ultimate Invoice', JLWI_TEXT_DOMAIN ), $this->invoice_available(), $this->invoice_available() ? __( 'تولید PDF آماده است', JLWI_TEXT_DOMAIN ) : __( 'حالت متنی استفاده می‌شود', JLWI_TEXT_DOMAIN ) ); ?>
 						<?php $this->status_card( __( 'صف ارسال', JLWI_TEXT_DOMAIN ), function_exists( 'as_enqueue_async_action' ), function_exists( 'as_enqueue_async_action' ) ? __( 'Action Scheduler فعال است', JLWI_TEXT_DOMAIN ) : __( 'از WP-Cron/ارسال مستقیم استفاده می‌شود', JLWI_TEXT_DOMAIN ) ); ?>
@@ -161,11 +177,38 @@ final class JLWI_Admin {
 							</td>
 						</tr>
 						<tr>
-							<th scope="row"><label for="jlwi-device-id"><?php echo esc_html__( 'Device ID واتساپ', JLWI_TEXT_DOMAIN ); ?></label></th>
+							<th scope="row"><?php echo esc_html__( 'دریافت دستگاه‌ها و Flowها', JLWI_TEXT_DOMAIN ); ?></th>
 							<td>
-								<input id="jlwi-device-id" type="text" class="regular-text ltr" name="jlwi[device_id]" value="<?php echo esc_attr( $device_locked ? $effective['device_id'] : $settings['device_id'] ); ?>" <?php disabled( $device_locked ); ?>>
-								<p class="description"><?php echo esc_html__( 'شناسه دستگاه متصل در پنل جتلاینز.', JLWI_TEXT_DOMAIN ); ?><?php echo $device_locked ? ' ' . esc_html__( 'از ثابت JLWI_DEVICE_ID خوانده می‌شود.', JLWI_TEXT_DOMAIN ) : ''; ?></p>
+								<button type="button" id="jlwi-refresh-destinations" class="button"><?php echo esc_html__( 'دریافت / تازه‌سازی فهرست‌ها', JLWI_TEXT_DOMAIN ); ?></button>
+								<p id="jlwi-discovery-status" class="description" role="status" aria-live="polite"><?php echo esc_html__( 'با واردکردن کلید، فهرست‌ها خودکار دریافت می‌شوند. برای دریافت فهرست نیازی به ذخیره کلید نیست.', JLWI_TEXT_DOMAIN ); ?></p>
+								<noscript><?php echo esc_html__( 'برای دریافت فهرست دستگاه‌ها و Flowها، جاوااسکریپت مرورگر را فعال کنید.', JLWI_TEXT_DOMAIN ); ?></noscript>
 							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="jlwi-send-method"><?php echo esc_html__( 'روش ارسال', JLWI_TEXT_DOMAIN ); ?></label></th>
+							<td>
+								<select id="jlwi-send-method" name="jlwi[send_method]">
+									<option value="whatsapp" <?php selected( $settings['send_method'], 'whatsapp' ); ?>><?php echo esc_html__( 'واتساپ مستقیم', JLWI_TEXT_DOMAIN ); ?></option>
+									<option value="telegram" <?php selected( $settings['send_method'], 'telegram' ); ?>><?php echo esc_html__( 'تلگرام مستقیم', JLWI_TEXT_DOMAIN ); ?></option>
+									<option value="flow" <?php selected( $settings['send_method'], 'flow' ); ?>><?php echo esc_html__( 'Flow جتلاینز', JLWI_TEXT_DOMAIN ); ?></option>
+								</select>
+								<p class="description"><?php echo esc_html__( 'این روش برای پیام وضعیت، فاکتور، گزارش‌ها و ارسال آزمایشی استفاده می‌شود. در Flow، ترتیب دستگاه‌ها و مسیر جایگزین در پنل جتلاینز تنظیم می‌شود.', JLWI_TEXT_DOMAIN ); ?></p>
+							</td>
+						</tr>
+						<tr data-jlwi-method="whatsapp">
+							<th scope="row"><label for="jlwi-device-id"><?php echo esc_html__( 'دستگاه واتساپ', JLWI_TEXT_DOMAIN ); ?></label></th>
+							<td>
+								<?php $this->destination_select( 'device_id', 'jlwi-device-id', $effective['device_id'], $device_locked ); ?>
+								<?php if ( $device_locked ) : ?><p class="description"><?php echo esc_html__( 'از ثابت JLWI_DEVICE_ID خوانده می‌شود.', JLWI_TEXT_DOMAIN ); ?></p><?php endif; ?>
+							</td>
+						</tr>
+						<tr data-jlwi-method="telegram">
+							<th scope="row"><label for="jlwi-telegram-device-id"><?php echo esc_html__( 'دستگاه تلگرام', JLWI_TEXT_DOMAIN ); ?></label></th>
+							<td><?php $this->destination_select( 'telegram_device_id', 'jlwi-telegram-device-id', $settings['telegram_device_id'] ); ?></td>
+						</tr>
+						<tr data-jlwi-method="flow">
+							<th scope="row"><label for="jlwi-flow-id"><?php echo esc_html__( 'Flow ارسال', JLWI_TEXT_DOMAIN ); ?></label></th>
+							<td><?php $this->destination_select( 'flow_id', 'jlwi-flow-id', $settings['flow_id'] ); ?></td>
 						</tr>
 						<tr>
 							<th scope="row"><?php echo esc_html__( 'تأخیر طبیعی جتلاینز', JLWI_TEXT_DOMAIN ); ?></th>
@@ -271,7 +314,7 @@ final class JLWI_Admin {
 							<td>
 								<?php $this->checkbox( 'delete_local_pdf', $settings['delete_local_pdf'], __( 'فایل موقت PDF روی هاست پس از پردازش حذف شود.', JLWI_TEXT_DOMAIN ) ); ?><br>
 								<?php $this->checkbox( 'delete_remote_media', $settings['delete_remote_media'], __( 'مدیای آپلودشده در جتلاینز پس از پایان موفق ارسال حذف شود.', JLWI_TEXT_DOMAIN ) ); ?>
-								<p class="description jlwi-warning-text"><?php echo esc_html__( 'حذف مدیای جتلاینز به‌صورت پیش‌فرض خاموش است تا سابقه فایل در پنل باقی بماند.', JLWI_TEXT_DOMAIN ); ?></p>
+								<p class="description jlwi-warning-text"><?php echo esc_html__( 'حذف مدیای جتلاینز به‌صورت پیش‌فرض خاموش است. در روش Flow، فایل برای اجرای مراحل بعدی در جتلاینز حفظ می‌شود.', JLWI_TEXT_DOMAIN ); ?></p>
 							</td>
 						</tr>
 						<tr>
@@ -331,14 +374,14 @@ final class JLWI_Admin {
 				</section>
 
 				<section id="jlwi-daily-report" class="jlwi-card">
-					<h2><?php echo esc_html__( 'گزارش روزانه واتساپ', JLWI_TEXT_DOMAIN ); ?></h2>
-					<p><?php echo esc_html__( 'گزارش از همان API Key و Device ID واتساپ استفاده می‌کند و فقط برای گیرندگان گزارش تنظیم‌شده در بالا فرستاده می‌شود.', JLWI_TEXT_DOMAIN ); ?></p>
+					<h2><?php echo esc_html__( 'گزارش روزانه', JLWI_TEXT_DOMAIN ); ?></h2>
+					<p><?php echo esc_html__( 'گزارش با روش و مقصد ذخیره‌شده در تب اتصال، فقط برای گیرندگان گزارش تنظیم‌شده در بالا فرستاده می‌شود.', JLWI_TEXT_DOMAIN ); ?></p>
 					<table class="form-table" role="presentation">
 						<tbody>
 						<tr>
 							<th scope="row"><?php echo esc_html__( 'فعال‌سازی گزارش', JLWI_TEXT_DOMAIN ); ?></th>
 							<td>
-								<?php $this->checkbox( 'daily_report_enabled', $settings['daily_report_enabled'], __( 'هر روز گزارش فروش از طریق واتساپ برای گیرندگان گزارش ارسال شود.', JLWI_TEXT_DOMAIN ) ); ?>
+								<?php $this->checkbox( 'daily_report_enabled', $settings['daily_report_enabled'], __( 'هر روز گزارش فروش برای گیرندگان گزارش ارسال شود.', JLWI_TEXT_DOMAIN ) ); ?>
 								<p class="description"><?php echo esc_html( $this->report_schedule_text( $report_enabled, $next_report ) ); ?></p>
 							</td>
 						</tr>
@@ -376,14 +419,14 @@ final class JLWI_Admin {
 				</section>
 
 				<section class="jlwi-card">
-					<h2><?php echo esc_html__( 'گزارش هفتگی واتساپ', JLWI_TEXT_DOMAIN ); ?></h2>
+					<h2><?php echo esc_html__( 'گزارش هفتگی', JLWI_TEXT_DOMAIN ); ?></h2>
 					<p><?php echo esc_html__( 'گزارش هفتگی، ۷ روز تقویمی کامل گذشته را با ۷ روز قبل از آن مقایسه می‌کند و فقط برای گیرندگان گزارش فرستاده می‌شود. پیش‌فرض زمان‌بندی شنبه است؛ یعنی گزارش شنبه تا جمعهٔ قبل ارسال می‌شود.', JLWI_TEXT_DOMAIN ); ?></p>
 					<table class="form-table" role="presentation">
 						<tbody>
 						<tr>
 							<th scope="row"><?php echo esc_html__( 'فعال‌سازی گزارش', JLWI_TEXT_DOMAIN ); ?></th>
 							<td>
-								<?php $this->checkbox( 'weekly_report_enabled', $settings['weekly_report_enabled'], __( 'هر هفته گزارش فروش از طریق واتساپ برای گیرندگان گزارش ارسال شود.', JLWI_TEXT_DOMAIN ) ); ?>
+								<?php $this->checkbox( 'weekly_report_enabled', $settings['weekly_report_enabled'], __( 'هر هفته گزارش فروش برای گیرندگان گزارش ارسال شود.', JLWI_TEXT_DOMAIN ) ); ?>
 								<p class="description"><?php echo esc_html( $this->weekly_report_schedule_text( $weekly_report_enabled, $next_weekly_report ) ); ?></p>
 							</td>
 						</tr>
@@ -494,7 +537,7 @@ final class JLWI_Admin {
 			<?php if ( 'connection' === $active_tab ) : ?>
 			<section class="jlwi-card jlwi-test-card">
 				<h2><?php echo esc_html__( 'ارسال پیام آزمایشی', JLWI_TEXT_DOMAIN ); ?></h2>
-				<p><?php echo esc_html__( 'این دکمه یک پیام واقعی از دستگاه انتخاب‌شده ارسال می‌کند و ممکن است اعتبار حساب جتلاینز را مصرف کند.', JLWI_TEXT_DOMAIN ); ?></p>
+				<p><?php echo esc_html__( 'این دکمه یک پیام واقعی با روش و مقصد ذخیره‌شده ارسال می‌کند و ممکن است اعتبار حساب جتلاینز را مصرف کند. ابتدا تنظیمات اتصال را ذخیره کنید.', JLWI_TEXT_DOMAIN ); ?></p>
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 					<input type="hidden" name="action" value="jlwi_send_test">
 					<?php wp_nonce_field( 'jlwi_send_test' ); ?>
@@ -508,19 +551,6 @@ final class JLWI_Admin {
 					</div>
 					<?php submit_button( __( 'ارسال آزمایشی', JLWI_TEXT_DOMAIN ), 'secondary', 'submit', false ); ?>
 				</form>
-			</section>
-
-			<section class="jlwi-card jlwi-api-summary">
-				<h2><?php echo esc_html__( 'خلاصه درخواست‌های API', JLWI_TEXT_DOMAIN ); ?></h2>
-				<pre class="ltr">POST <?php echo esc_html( untrailingslashit( (string) $effective['api_base_url'] ) ); ?>/media
-Content-Type: multipart/form-data
-X-API-KEY: ********
-file: invoice.pdf
-
-POST <?php echo esc_html( untrailingslashit( (string) $effective['api_base_url'] ) ); ?>/whatsapps/{deviceId}/message
-Content-Type: application/json
-X-API-KEY: ********
-{"phonenumber":"98912...","text":"...","mediaId":"uuid-optional"}</pre>
 			</section>
 			<?php endif; ?>
 		</div>
@@ -567,6 +597,11 @@ X-API-KEY: ********
 
 			if ( ! ( defined( 'JLWI_DEVICE_ID' ) && '' !== trim( (string) JLWI_DEVICE_ID ) ) ) {
 				$new['device_id'] = isset( $raw['device_id'] ) ? sanitize_text_field( trim( (string) $raw['device_id'] ) ) : '';
+			}
+			$method = isset( $raw['send_method'] ) && is_string( $raw['send_method'] ) ? $raw['send_method'] : 'whatsapp';
+			$new['send_method'] = in_array( $method, array( 'whatsapp', 'telegram', 'flow' ), true ) ? $method : 'whatsapp';
+			foreach ( array( 'telegram_device_id', 'flow_id' ) as $key ) {
+				$new[ $key ] = isset( $raw[ $key ] ) && is_scalar( $raw[ $key ] ) ? sanitize_text_field( trim( (string) $raw[ $key ] ) ) : '';
 			}
 		} elseif ( 'invoices' === $active_tab ) {
 			foreach ( array( 'include_billing_phone', 'prevent_duplicates', 'add_order_notes', 'delete_local_pdf', 'delete_remote_media' ) as $key ) {
@@ -626,6 +661,47 @@ X-API-KEY: ********
 		$this->set_notice( 'success', __( 'تنظیمات Jetlinez ذخیره شد.', JLWI_TEXT_DOMAIN ) );
 		wp_safe_redirect( $this->settings_url( $active_tab ) );
 		exit;
+	}
+
+	/**
+	 * Fetch account destinations using saved or newly entered credentials.
+	 * Newly entered credentials are never persisted by this read-only action.
+	 *
+	 * @return void
+	 */
+	public function discover_destinations() {
+		if ( ! current_user_can( $this->capability() ) && ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'شما اجازه دسترسی به این بخش را ندارید.', JLWI_TEXT_DOMAIN ) ), 403 );
+		}
+		check_ajax_referer( 'jlwi_discover_destinations' );
+
+		$settings = JLWI_Settings::all();
+		foreach ( array( 'api_base_url' => 'JLWI_API_BASE_URL', 'api_key' => 'JLWI_API_KEY' ) as $key => $constant ) {
+			if ( defined( $constant ) && '' !== trim( (string) constant( $constant ) ) ) {
+				continue;
+			}
+			if ( isset( $_POST[ $key ] ) && is_string( $_POST[ $key ] ) ) {
+				$value = trim( wp_unslash( $_POST[ $key ] ) );
+				if ( 'api_key' === $key ) {
+					if ( '' !== $value ) {
+						$settings[ $key ] = preg_replace( '/[\r\n]+/', '', $value );
+					}
+				} else {
+					$value = untrailingslashit( esc_url_raw( $value ) );
+					if ( ! $this->valid_api_url( $value ) ) {
+						wp_send_json_error( array( 'message' => __( 'آدرس پایه API معتبر نیست.', JLWI_TEXT_DOMAIN ) ), 400 );
+					}
+					$settings[ $key ] = $value;
+				}
+			}
+		}
+
+		$client = new JLWI_API_Client( $settings );
+		$result = $client->discover_destinations();
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( array( 'message' => $result->get_error_message() ), 400 );
+		}
+		wp_send_json_success( $result );
 	}
 
 	/**
@@ -918,6 +994,18 @@ X-API-KEY: ********
 			<input type="checkbox" name="jlwi[<?php echo esc_attr( $key ); ?>]" value="yes" <?php checked( 'yes', $value ); ?>>
 			<?php echo esc_html( $label ); ?>
 		</label>
+		<?php
+	}
+
+	/** Render a destination select, preserving an existing ID before discovery. */
+	private function destination_select( $key, $id, $value, $locked = false ) {
+		?>
+		<select id="<?php echo esc_attr( $id ); ?>" class="regular-text" name="jlwi[<?php echo esc_attr( $key ); ?>]" <?php disabled( $locked ); ?>>
+			<option value=""><?php echo esc_html__( 'انتخاب کنید…', JLWI_TEXT_DOMAIN ); ?></option>
+			<?php if ( '' !== (string) $value ) : ?>
+				<option value="<?php echo esc_attr( $value ); ?>" selected><?php echo esc_html( $value ); ?></option>
+			<?php endif; ?>
+		</select>
 		<?php
 	}
 

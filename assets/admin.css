@@ -69,6 +69,10 @@
 	margin-top: 0;
 }
 
+.jlwi-wrap [data-jlwi-method][hidden] {
+	display: none;
+}
+
 .jlwi-card textarea.code {
 	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 	line-height: 1.8;
@@ -183,17 +187,6 @@
 .jlwi-test-row label {
 	font-weight: 600;
 	padding-top: 7px;
-}
-
-.jlwi-api-summary pre {
-	white-space: pre-wrap;
-	word-break: break-word;
-	background: #1d2327;
-	color: #f0f0f1;
-	padding: 16px;
-	border-radius: 5px;
-	direction: ltr;
-	text-align: left;
 }
 
 .ltr {
