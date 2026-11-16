@@ -329,7 +329,8 @@ final class JLWI_Sender {
 				);
 
 				if ( 'text' === $state['mode'] && ! $state['text_sent'] ) {
-					$context['invoice_note'] = __( 'در تنظیمات این گیرنده، ارسال فقط به‌صورت متن انتخاب شده است.', JLWI_TEXT_DOMAIN );
+					// Text-only delivery is intentional; suppress the default PDF-unavailable note.
+					$context['invoice_note'] = '';
 					$text = JLWI_Template::render( JLWI_Settings::status_template( $status ), $order, $status, false, $context );
 					$res  = $client->send_message( $phone, $text );
 					++$activity_count;
