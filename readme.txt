@@ -4,7 +4,7 @@ Tags: woocommerce, whatsapp, telegram, invoice, pdf, jetlinez, order status
 Requires at least: 6.2
 Requires PHP: 7.4
 WC requires at least: 7.0
-Stable tag: 1.10.0
+Stable tag: 1.10.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
